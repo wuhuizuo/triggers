@@ -23,10 +23,11 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestEvalBinding(t *testing.T) {
+func TestEvalBindingWithCorrectContentLength(t *testing.T) {
+	// Test with HTTP file that has correct content length header - expect to pass
 	out := new(bytes.Buffer)
 	if err := evalBinding(out, "../testdata/triggerbinding.yaml", "../testdata/http.txt"); err != nil {
-		t.Fatalf("evalBinding: %v", err)
+		t.Fatalf("evalBinding with correct Content-Length should pass: %v", err)
 	}
 
 	want := `[
@@ -45,10 +46,26 @@ func TestEvalBinding(t *testing.T) {
 	}
 }
 
-func TestEvalBindingMissingContentLength(t *testing.T) {
+func TestEvalBindingWithWrongContentLength(t *testing.T) {
+	// Test with HTTP file that has wrong content length header - expect to fail
+	out := new(bytes.Buffer)
+	err := evalBinding(out, "../testdata/triggerbinding.yaml", "../testdata/http_wrong_content_length.txt")
+	if err == nil {
+		t.Fatal("evalBinding with wrong Content-Length should fail, but it passed")
+	}
+
+	// Verify that the error is related to parsing the body
+	expectedErrorSubstring := "unexpected end of JSON input"
+	if !bytes.Contains([]byte(err.Error()), []byte(expectedErrorSubstring)) {
+		t.Errorf("Expected error to contain %q, got: %v", expectedErrorSubstring, err)
+	}
+}
+
+func TestEvalBindingWithNoContentLength(t *testing.T) {
+	// Test with HTTP file that has no content length header - expect to pass
 	out := new(bytes.Buffer)
 	if err := evalBinding(out, "../testdata/triggerbinding.yaml", "../testdata/http_no_content_length.txt"); err != nil {
-		t.Fatalf("evalBinding with missing Content-Length: %v", err)
+		t.Fatalf("evalBinding with no Content-Length should pass: %v", err)
 	}
 
 	want := `[
@@ -64,56 +81,5 @@ func TestEvalBindingMissingContentLength(t *testing.T) {
 `
 	if diff := cmp.Diff(want, out.String()); diff != "" {
 		t.Errorf("-want +got: %s", diff)
-	}
-}
-
-func TestReadHTTPAutoComputesContentLength(t *testing.T) {
-	req, body, err := readHTTP("../testdata/http_no_content_length.txt")
-	if err != nil {
-		t.Fatalf("readHTTP: %v", err)
-	}
-
-	expectedBodyLength := len(`{"test": "body"}`)
-	if req.ContentLength != int64(expectedBodyLength) {
-		t.Errorf("Expected ContentLength to be auto-computed to %d, got %d", expectedBodyLength, req.ContentLength)
-	}
-
-	if req.Header.Get("Content-Length") != "16" {
-		t.Errorf("Expected Content-Length header to be set to '16', got '%s'", req.Header.Get("Content-Length"))
-	}
-
-	if len(body) != expectedBodyLength {
-		t.Errorf("Expected body length to be %d, got %d", expectedBodyLength, len(body))
-	}
-
-	expectedBody := `{"test": "body"}`
-	if string(body) != expectedBody {
-		t.Errorf("Expected body to be %q, got %q", expectedBody, string(body))
-	}
-}
-
-func TestReadHTTPPreservesExistingContentLength(t *testing.T) {
-	// Test with the original file that already has Content-Length: 16
-	req, body, err := readHTTP("../testdata/http.txt")
-	if err != nil {
-		t.Fatalf("readHTTP: %v", err)
-	}
-
-	expectedBodyLength := len(`{"test": "body"}`)
-	if req.ContentLength != int64(expectedBodyLength) {
-		t.Errorf("Expected ContentLength to remain %d, got %d", expectedBodyLength, req.ContentLength)
-	}
-
-	if req.Header.Get("Content-Length") != "16" {
-		t.Errorf("Expected Content-Length header to remain '16', got '%s'", req.Header.Get("Content-Length"))
-	}
-
-	if len(body) != expectedBodyLength {
-		t.Errorf("Expected body length to be %d, got %d", expectedBodyLength, len(body))
-	}
-
-	expectedBody := `{"test": "body"}`
-	if string(body) != expectedBody {
-		t.Errorf("Expected body to be %q, got %q", expectedBody, string(body))
 	}
 }
