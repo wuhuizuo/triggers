@@ -51,3 +51,4 @@ cmd/*/kodata/source.tar.gz
 # Temporary GOPATH used during code gen if user's Tekton checkout is
 # not already in GOPATH.
 .gopath
+/binding-eval
